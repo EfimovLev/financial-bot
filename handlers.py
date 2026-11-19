@@ -27,8 +27,29 @@ FEEDBACK_CHAT_ID = int(os.getenv("FEEDBACK_CHAT_ID", "0"))
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
+    user = message.from_user
     async with async_session_maker() as session:
-        await get_or_create_user(session, message.from_user.id)
+        existing_user = await session.get(User, user.id)
+        is_new_user = existing_user is None
+        await get_or_create_user(session, user.id)
+        total_users = await session.scalar(select(func.count(User.id)))
+
+    if is_new_user and FEEDBACK_CHAT_ID != 0:
+        username = f"@{user.username}" if user.username else "нет username"
+        notify_text = (
+            "🆕 <b>Новый пользователь в боте</b>\n"
+            f"👤 <b>Имя:</b> {user.full_name} ({username})\n"
+            f"🆔 <code>{user.id}</code>\n"
+            f"👥 <b>Всего пользователей:</b> {total_users}"
+        )
+        try:
+            await message.bot.send_message(
+                chat_id=FEEDBACK_CHAT_ID,
+                text=notify_text,
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
 
     await message.answer(
         "👋 Привет! Добро пожаловать в твой бот для учета личных финансов.",
