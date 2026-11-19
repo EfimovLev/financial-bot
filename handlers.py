@@ -430,3 +430,64 @@ async def get_statistics(callback: CallbackQuery):
 
     await callback.message.edit_text(report, parse_mode="Markdown")
     await callback.answer()
+
+
+router = Router()
+FEEDBACK_CHAT_ID = int(os.getenv("FEEDBACK_CHAT_ID", "0"))
+
+
+# 1. Нажатие на кнопку "💬 Обратная связь"
+@router.message(F.text == "💬 Обратная связь")
+async def ask_feedback(message: Message, state: FSMContext):
+    await state.set_state(FeedbackStates.waiting_for_feedback)
+    await message.answer(
+        "✍️ Опиши проблему, баг или идею для улучшения одним сообщением.\n"
+        "При необходимости можешь прикрепить скриншот.",
+        reply_markup=cancel_feedback_kb
+    )
+
+
+# 2. Отмена отправки
+@router.message(FeedbackStates.waiting_for_feedback, F.text == "❌ Отмена")
+async def cancel_feedback(message: Message, state: FSMContext):
+    await state.clear()
+    await message.answer("Отправка отменена.", reply_markup=main_menu_kb)
+
+
+# 3. Приём текста или фото и пересылка в группу
+@router.message(FeedbackStates.waiting_for_feedback)
+async def send_feedback_to_group(message: Message, state: FSMContext):
+    user = message.from_user
+    username = f"@{user.username}" if user.username else "нет username"
+
+    header = (
+        "🐞 <b>Новое обращение</b>\n"
+        f"👤 <b>От:</b> {user.full_name} ({username})\n"
+        f"🆔 <code>{user.id}</code>\n"
+        "───────────────\n"
+    )
+
+    if FEEDBACK_CHAT_ID != 0:
+        if message.text:
+            await message.bot.send_message(
+                chat_id=FEEDBACK_CHAT_ID,
+                text=f"{header}{message.text}",
+                parse_mode="HTML"
+            )
+        elif message.photo:
+            caption = message.caption or "<i>Без текстового описания</i>"
+            await message.bot.send_photo(
+                chat_id=FEEDBACK_CHAT_ID,
+                photo=message.photo[-1].file_id,
+                caption=f"{header}{caption}",
+                parse_mode="HTML"
+            )
+        else:
+            await message.answer("Пожалуйста, отправь текст или скриншот с описанием.")
+            return
+
+    await state.clear()
+    await message.answer(
+        "✅ Спасибо! Сообщение передано команде разработки.",
+        reply_markup=main_menu_kb
+    )

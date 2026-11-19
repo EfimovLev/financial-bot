@@ -6,3 +6,5 @@ class TransactionStates(StatesGroup):
 class CategoryStates(StatesGroup):
     waiting_for_name = State()
     waiting_for_type = State()
+class FeedbackStates(StatesGroup):
+    waiting_for_feedback = State()

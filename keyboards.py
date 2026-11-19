@@ -7,6 +7,10 @@ def main_menu():
         [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="📋 Мои категории")],
         [KeyboardButton(text="➕ Добавить категорию"), KeyboardButton(text="🗑 Удалить категорию")],
         [KeyboardButton(text="⚠️ Сбросить данные"), KeyboardButton(text="❓ Помощь")]
+        cancel_feedback_kb = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="❌ Отмена")]],
+            resize_keyboard=True
+
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
@@ -60,3 +64,4 @@ def welcome_inline_keyboard():
     builder.button(text="📖 Инструкция", callback_data="show_instruction")
     builder.adjust(1)
     return builder.as_markup()
+
