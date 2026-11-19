@@ -32,7 +32,7 @@ async def cmd_start(message: Message):
         existing_user = await session.get(User, user.id)
         is_new_user = existing_user is None
         await get_or_create_user(session, user.id)
-        total_users = await session.scalar(select(func.count(User.id)))
+        total_users = await session.scalar(select(func.count(User.telegram_id)))
 
     if is_new_user and FEEDBACK_CHAT_ID != 0:
         username = f"@{user.username}" if user.username else "нет username"
