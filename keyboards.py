@@ -10,7 +10,7 @@ def main_menu():
         cancel_feedback_kb = ReplyKeyboardMarkup(
             keyboard=[[KeyboardButton(text="❌ Отмена")]],
             resize_keyboard=True
-
+    )
     ]
     return ReplyKeyboardMarkup(keyboard=kb, resize_keyboard=True)
 
