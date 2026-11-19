@@ -1,3 +1,4 @@
+import os
 import re
 from datetime import datetime, timedelta
 from aiogram import Router, F
@@ -8,25 +9,27 @@ from sqlalchemy import select, func, and_, delete
 
 from database import async_session_maker, get_or_create_user, Category, Transaction, User
 from keyboards import (
-    main_menu, 
+    main_menu,
     cancel_keyboard,
-    category_type_keyboard, 
-    make_categories_keyboard, 
+    cancel_feedback_kb,
+    category_type_keyboard,
+    make_categories_keyboard,
     after_transaction_keyboard,
     categories_view_keyboard,
-    make_delete_categories_keyboard, 
+    make_delete_categories_keyboard,
     welcome_inline_keyboard
 )
-from states import CategoryStates, TransactionStates
+from states import CategoryStates, TransactionStates, FeedbackStates
 
 router = Router()
+FEEDBACK_CHAT_ID = int(os.getenv("FEEDBACK_CHAT_ID", "0"))
+
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     async with async_session_maker() as session:
         await get_or_create_user(session, message.from_user.id)
-    
-    # Убрано лишнее сообщение про главное меню, остался только чистый старт и клавиатура
+
     await message.answer(
         "👋 Привет! Добро пожаловать в твой бот для учета личных финансов.",
         reply_markup=main_menu()
@@ -35,6 +38,7 @@ async def cmd_start(message: Message):
         "Нажми на кнопку ниже, чтобы ознакомиться с инструкцией:",
         reply_markup=welcome_inline_keyboard()
     )
+
 
 @router.message(F.text == "🏠 Главное меню")
 async def text_main_menu(message: Message, state: FSMContext):
@@ -45,6 +49,7 @@ async def text_main_menu(message: Message, state: FSMContext):
         parse_mode="Markdown"
     )
 
+
 @router.message(F.text == "🔙 Назад")
 async def cancel_action(message: Message, state: FSMContext):
     await state.clear()
@@ -53,6 +58,7 @@ async def cancel_action(message: Message, state: FSMContext):
         reply_markup=main_menu(),
         parse_mode="Markdown"
     )
+
 
 @router.callback_query(F.data == "go_main_menu")
 async def callback_go_main_menu(callback: CallbackQuery, state: FSMContext):
@@ -65,6 +71,7 @@ async def callback_go_main_menu(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
+
 @router.callback_query(F.data == "back_to_menu")
 async def back_to_menu_callback(callback: CallbackQuery, state: FSMContext):
     await state.clear()
@@ -75,6 +82,7 @@ async def back_to_menu_callback(callback: CallbackQuery, state: FSMContext):
         parse_mode="Markdown"
     )
     await callback.answer()
+
 
 @router.callback_query(F.data == "show_instruction")
 async def process_instruction_callback(callback: CallbackQuery):
@@ -88,6 +96,7 @@ async def process_instruction_callback(callback: CallbackQuery):
     await callback.message.edit_text(instruction_text, parse_mode="Markdown")
     await callback.answer()
 
+
 @router.message(F.text == "❓ Помощь")
 async def cmd_help(message: Message):
     await message.answer(
@@ -99,11 +108,13 @@ async def cmd_help(message: Message):
         parse_mode="Markdown"
     )
 
+
 @router.message(F.text == "💰 Баланс")
 async def show_balance(message: Message):
     async with async_session_maker() as session:
         user = await get_or_create_user(session, message.from_user.id)
         await message.answer(f"💳 Текущий баланс основного счета: **{user.balance:,.2f} руб.**", parse_mode="Markdown")
+
 
 @router.message(F.text == "📋 Мои категории")
 async def show_user_categories(message: Message):
@@ -122,6 +133,7 @@ async def show_user_categories(message: Message):
 
     await message.answer(text, reply_markup=categories_view_keyboard(), parse_mode="Markdown")
 
+
 @router.message(F.text == "💸 Добавить запись")
 async def start_transaction(message: Message):
     user_id = message.from_user.id
@@ -139,6 +151,7 @@ async def start_transaction(message: Message):
         reply_markup=make_categories_keyboard(categories)
     )
 
+
 @router.callback_query(F.data.startswith("selcat_"))
 async def category_selected(callback: CallbackQuery, state: FSMContext):
     cat_id = int(callback.data.split("_")[1])
@@ -147,16 +160,17 @@ async def category_selected(callback: CallbackQuery, state: FSMContext):
         if not category:
             await callback.answer("Категория не найдена!", show_alert=True)
             return
-        
+
         await state.update_data(category_name=category.name, category_type=category.type)
         await state.set_state(TransactionStates.waiting_for_amount)
-        
+
         await callback.message.edit_text(
             f"Вы выбрали категорию: **{category.name}**\n\n"
             f"💵 Введите сумму цифрами (например: `350` или `1500`):",
             parse_mode="Markdown"
         )
         await callback.answer()
+
 
 @router.callback_query(F.data == "back_to_categories")
 async def back_to_categories_callback(callback: CallbackQuery, state: FSMContext):
@@ -177,6 +191,7 @@ async def back_to_categories_callback(callback: CallbackQuery, state: FSMContext
     )
     await callback.answer()
 
+
 @router.message(TransactionStates.waiting_for_amount)
 async def process_amount_input(message: Message, state: FSMContext):
     text_amount = message.text.replace(",", ".").strip()
@@ -195,7 +210,7 @@ async def process_amount_input(message: Message, state: FSMContext):
 
     async with async_session_maker() as session:
         user = await get_or_create_user(session, user_id)
-        
+
         if t_type == "expense":
             user.balance -= amount
             sign_str = "-"
@@ -226,6 +241,7 @@ async def process_amount_input(message: Message, state: FSMContext):
         parse_mode="Markdown"
     )
 
+
 @router.message(F.text == "🗑 Удалить категорию")
 async def start_delete_category(message: Message):
     user_id = message.from_user.id
@@ -244,6 +260,7 @@ async def start_delete_category(message: Message):
         parse_mode="Markdown"
     )
 
+
 @router.callback_query(F.data.startswith("delcat_"))
 async def process_delete_category(callback: CallbackQuery):
     cat_id = int(callback.data.split("_")[1])
@@ -252,7 +269,7 @@ async def process_delete_category(callback: CallbackQuery):
         if not category:
             await callback.answer("Категория не найдена или уже удалена!", show_alert=True)
             return
-        
+
         cat_name = category.name
         await session.delete(category)
         await session.commit()
@@ -262,6 +279,7 @@ async def process_delete_category(callback: CallbackQuery):
         parse_mode="Markdown"
     )
     await callback.answer()
+
 
 @router.message(F.text == "⚠️ Сбросить данные")
 async def reset_data_request(message: Message):
@@ -280,17 +298,18 @@ async def reset_data_request(message: Message):
         parse_mode="Markdown"
     )
 
+
 @router.callback_query(F.data == "confirm_reset")
 async def confirm_reset_data(callback: CallbackQuery):
     user_id = callback.from_user.id
     async with async_session_maker() as session:
         await session.execute(delete(Transaction).where(Transaction.user_id == user_id))
         await session.execute(delete(Category).where(Category.user_id == user_id))
-        
+
         user = await session.get(User, user_id)
         if user:
             user.balance = 0.0
-        
+
         defaults = [
             ("Продукты", "expense"), ("Транспорт", "expense"),
             ("Жилье", "expense"), ("Развлечения", "expense"), ("Кафе", "expense"),
@@ -299,7 +318,7 @@ async def confirm_reset_data(callback: CallbackQuery):
         for name, ctype in defaults:
             cat = Category(name=name, type=ctype, user_id=user_id)
             session.add(cat)
-            
+
         await session.commit()
 
     await callback.message.edit_text(
@@ -313,6 +332,7 @@ async def confirm_reset_data(callback: CallbackQuery):
     )
     await callback.answer()
 
+
 @router.callback_query(F.data == "cancel_reset")
 async def cancel_reset_data(callback: CallbackQuery):
     await callback.message.edit_text("❌ Сброс данных отменен.")
@@ -323,16 +343,19 @@ async def cancel_reset_data(callback: CallbackQuery):
     )
     await callback.answer()
 
+
 @router.message(F.text == "➕ Добавить категорию")
 async def start_add_category(message: Message, state: FSMContext):
     await state.set_state(CategoryStates.waiting_for_name)
     await message.answer("Введите название новой категории:", reply_markup=cancel_keyboard())
+
 
 @router.message(CategoryStates.waiting_for_name)
 async def category_received_name(message: Message, state: FSMContext):
     await state.update_data(name=message.text.strip().capitalize())
     await state.set_state(CategoryStates.waiting_for_type)
     await message.answer("Выберите тип категории:", reply_markup=category_type_keyboard())
+
 
 @router.callback_query(CategoryStates.waiting_for_type, F.data.startswith("type_"))
 async def category_received_type(callback: CallbackQuery, state: FSMContext):
@@ -365,6 +388,7 @@ async def category_received_type(callback: CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
+
 @router.message(F.text == "📊 Статистика")
 async def show_stats_menu(message: Message):
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -374,6 +398,7 @@ async def show_stats_menu(message: Message):
          InlineKeyboardButton(text="🏠 Главное меню", callback_data="go_main_menu")]
     ])
     await message.answer("Выберите период для формирования отчета:", reply_markup=kb)
+
 
 @router.callback_query(F.data.startswith("stat_"))
 async def get_statistics(callback: CallbackQuery):
@@ -400,7 +425,7 @@ async def get_statistics(callback: CallbackQuery):
         ).where(
             and_(Transaction.user_id == user_id, Transaction.date >= start_date)
         ).group_by(Transaction.type)
-        
+
         res = await session.execute(stmt)
         totals = {row[0]: row[1] for row in res.all()}
         total_expense = totals.get("expense", 0.0)
@@ -412,7 +437,7 @@ async def get_statistics(callback: CallbackQuery):
         ).where(
             and_(Transaction.user_id == user_id, Transaction.type == "expense", Transaction.date >= start_date)
         ).group_by(Transaction.category)
-        
+
         cat_res = await session.execute(cat_stmt)
         categories_breakdown = cat_res.all()
 
@@ -432,10 +457,6 @@ async def get_statistics(callback: CallbackQuery):
     await callback.answer()
 
 
-router = Router()
-FEEDBACK_CHAT_ID = int(os.getenv("FEEDBACK_CHAT_ID", "0"))
-
-
 # 1. Нажатие на кнопку "💬 Обратная связь"
 @router.message(F.text == "💬 Обратная связь")
 async def ask_feedback(message: Message, state: FSMContext):
@@ -451,7 +472,7 @@ async def ask_feedback(message: Message, state: FSMContext):
 @router.message(FeedbackStates.waiting_for_feedback, F.text == "❌ Отмена")
 async def cancel_feedback(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("Отправка отменена.", reply_markup=main_menu_kb)
+    await message.answer("Отправка отменена.", reply_markup=main_menu())
 
 
 # 3. Приём текста или фото и пересылка в группу
@@ -489,5 +510,5 @@ async def send_feedback_to_group(message: Message, state: FSMContext):
     await state.clear()
     await message.answer(
         "✅ Спасибо! Сообщение передано команде разработки.",
-        reply_markup=main_menu_kb
+        reply_markup=main_menu()
     )
